@@ -39,6 +39,7 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
+//start the server
 const start = async () => {
   try {
     if (!process.env.MONGO_URI) {
