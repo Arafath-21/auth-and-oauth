@@ -1,5 +1,5 @@
-import userModel from '../models/User.js';
-import asyncHandler from '../utils/asyncHandler.js';
+import { userModel } from '../models/User.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 import hashPassword from '../utils/hashPassword.js';
 import genrateToken from '../utils/genrateToken.js';
 import sendEmail from '../utils/sendEmail.js';
@@ -15,7 +15,7 @@ import verifyToken from '../utils/verifyToken.js';
  * @returns {Promise<void>} Sends a JSON response with a success message if registration is successful.
  * @throws {Error} Throws an error if the user already exists or if email verification fails.
  */
-const registerUser = asyncHandler(async (req, res) => {
+export const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
   const userExists = await userModel.findOne({ email });
@@ -25,6 +25,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error('user already exists, try to login/forgot password');
   }
   const hashedPassword = await hashPassword(password);
+
   const user = await userModel.create({
     name,
     email,
@@ -43,6 +44,7 @@ const registerUser = asyncHandler(async (req, res) => {
   res.status(201).json({
     message:
       'User registered successfully. Please check your email to verify your account.',
+    token: verificationToken,
   });
 });
 /**
@@ -55,8 +57,8 @@ const registerUser = asyncHandler(async (req, res) => {
  * @returns {Promise<void>} Sends a success message if verification is successful.
  * @throws {Error} Throws an error if the token is invalid or the user is not found.
  */
-const verifyUser = asyncHandler(async (req, res) => {
-  const { token } = req.body;
+export const verifyUser = asyncHandler(async (req, res) => {
+  const { token } = req.params;
   const decoded = verifyToken(token);
   const user = await userModel.findById(decoded.id);
   if (!user) {
@@ -81,7 +83,7 @@ const verifyUser = asyncHandler(async (req, res) => {
  * @returns {Promise<void>} Sends a JSON response with the user's details and a token if login is successful.
  * @throws {Error} Throws an error if the email or password is invalid, or if the user is not verified.
  */
-const loginUser = asyncHandler(async (req, res) => {
+export const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   const user = await userModel.findOne({ email });
@@ -92,7 +94,7 @@ const loginUser = asyncHandler(async (req, res) => {
       throw new Error('Please verify your email to log in');
     }
 
-    res.json({
+    res.status(200).json({
       _id: user._id,
       name: user.name,
       email: user.email,
@@ -114,7 +116,9 @@ const loginUser = asyncHandler(async (req, res) => {
  * @returns {Promise<void>} Sends a success message if the email is sent successfully.
  * @throws {Error} Throws an error if the user is not found.
  */
-const forgotPassword = asyncHandler(async (req, res) => {
+import crypto from 'crypto';
+
+export const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
 
   // Find the user by email
@@ -127,25 +131,50 @@ const forgotPassword = asyncHandler(async (req, res) => {
   }
 
   // Generate a reset token
-  const resetToken = genrateToken(user._id); // Fixed typo here
+  const resetToken = crypto.randomBytes(20).toString('hex');
 
-  // Construct the reset URL
+  // Hash the reset token and store it in the database along with an expiry time
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  user.resetPasswordToken = hashedToken;
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // Token expires in 10 minutes
+  await user.save({ validateBeforeSave: false });
+
+  // Construct the reset URL with the plain token
   const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset/${resetToken}`;
 
-  // Message to be sent in the email
-  const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: ${resetUrl}`;
+  // Email message
+  const message = `
+    You are receiving this email because you (or someone else) has requested a password reset for your account.
+    Please click the following link to reset your password:
+    ${resetUrl}
+    If you did not request this, please ignore this email and your password will remain unchanged.
+  `;
 
-  // Send the email
-  await sendEmail({
-    email: user.email,
-    subject: 'Password Reset',
-    message,
-  });
+  try {
+    // Send the email
+    await sendEmail({
+      email: user.email,
+      subject: 'Password Reset',
+      message,
+    });
 
-  // Respond to the request
-  res.status(200).json({
-    message: 'Email sent',
-  });
+    // Respond to the request
+    res.status(200).json({
+      message: 'Email sent',
+      token: resetToken,
+    });
+  } catch {
+    // If email fails, reset the token fields
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    res.status(500);
+    throw new Error('Email could not be sent');
+  }
 });
 
 /**
@@ -159,31 +188,32 @@ const forgotPassword = asyncHandler(async (req, res) => {
  * @returns {Promise<void>} Sends a success message if the password is reset successfully.
  * @throws {Error} Throws an error if the token is invalid or the user is not found.
  */
-const resetPassword = asyncHandler(async (req, res) => {
+export const resetPassword = asyncHandler(async (req, res) => {
   const { token } = req.params;
-  const { password } = req.body;
+  const { password } = req.body; // Get the new password from the request body
 
-  const decoded = verifyToken(token);
+  // Hash the token from the URL to compare with the hashed token in the database
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-  const user = await userModel.findById(decoded.id);
+  // Find the user by the reset token and ensure the token hasn't expired
+  const user = await userModel.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: Date.now() }, // Token should still be valid
+  });
 
   if (!user) {
     res.status(400);
-    throw new Error('Invalid token');
+    throw new Error('Invalid or expired token');
   }
 
+  // If valid, hash the new password and save it
   user.password = await hashPassword(password);
+  user.resetPasswordToken = undefined; // Clear the reset token
+  user.resetPasswordExpire = undefined; // Clear the token expiry
   await user.save();
 
+  // Send success response
   res.status(200).json({
     message: 'Password reset successfully',
   });
 });
-
-export default {
-  registerUser,
-  verifyUser,
-  loginUser,
-  forgotPassword,
-  resetPassword,
-};

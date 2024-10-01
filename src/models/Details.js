@@ -2,13 +2,14 @@ import { Schema, model } from 'mongoose';
 
 const detailsSchema = new Schema(
   {
-    name: { type: String, required: true },
-    batch: { type: String, required: true },
-    course: { type: String, required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    name: { type: String },
+    batch: { type: String },
+    course: { type: String },
   },
-  { timestamps: true, collection: 'User', versionKey: false }
+  { timestamps: true, collection: 'Details', versionKey: false }
 );
 
-const detailModel = model('Detail', detailsSchema);
+export const detailModel = model('Details', detailsSchema);
 
-export default detailModel;
+// export default detailModel;

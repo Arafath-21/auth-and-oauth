@@ -11,21 +11,32 @@ import nodemailer from 'nodemailer';
  * @throws {Error} Throws an error if the email could not be sent.
  */
 const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
-    service: 'Gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-    },
-  });
+  try {
+    // Create a transporter using Gmail SMTP service
+    const transporter = nodemailer.createTransport({
+      service: 'Gmail',
+      auth: {
+        user: process.env.EMAIL_USER, // Your email address
+        pass: process.env.EMAIL_PASS, // Your email password or app password (if 2FA is enabled)
+      },
+    });
+    console.log(process.env.EMAIL_USER);
 
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: options.email,
-    subject: options.subject,
-    text: options.message,
-  };
+    // Define email options
+    const mailOptions = {
+      from: process.env.EMAIL_USER, // Sender's email address
+      to: options.email, // Recipient's email address
+      subject: options.subject, // Email subject
+      text: options.message, // Email body (plain text)
+    };
 
-  await transporter.sendMail(mailOptions);
+    // Send the email
+    await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully!');
+  } catch (error) {
+    console.error('Failed to send email:', error);
+    throw new Error('Email could not be sent');
+  }
 };
 
 export default sendEmail;

@@ -1,6 +1,6 @@
 import asyncHandler from '../utils/asyncHandler.js';
 
-const uploadFile = asyncHandler(async (req, res) => {
+export const uploadFile = asyncHandler(async (req, res) => {
   if (!req.file) {
     res.status(400);
     throw new Error('No file uploaded');
@@ -12,4 +12,4 @@ const uploadFile = asyncHandler(async (req, res) => {
   });
 });
 
-export default uploadFile; // Correct export
+// export default uploadFile; // Correct export

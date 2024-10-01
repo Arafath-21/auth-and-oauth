@@ -1,8 +1,8 @@
 import verifyToken from '../utils/verifyToken.js';
-import asyncHandler from '../utils/asyncHandler.js';
-import userModel from '../models/User.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { userModel } from '../models/User.js';
 
-const protect = asyncHandler(async (req, res, next) => {
+export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
   if (
@@ -11,8 +11,11 @@ const protect = asyncHandler(async (req, res, next) => {
   ) {
     try {
       token = req.headers.authorization.split(' ')[1];
+
       const decoded = verifyToken(token);
-      req.userModel = await userModel.findById(decoded.id).select('-password');
+      req.user = await userModel.findById(decoded.id).select('-password');
+      console.log(req.user);
+
       next();
     } catch {
       res.status(401);
@@ -25,4 +28,4 @@ const protect = asyncHandler(async (req, res, next) => {
   }
 });
 
-export default protect;
+// export default { protect };

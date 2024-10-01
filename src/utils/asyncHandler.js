@@ -5,8 +5,8 @@
  * @param {Function} fn - The asynchronous function to be wrapped.
  * @returns {Function} A middleware function that handles the request, response, and next function.
  */
-const asyncHandler = (fn) => (req, res, next) => {
+export const asyncHandler = (fn) => (req, res, next) => {
   return Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-export default asyncHandler;
+// export default asyncHandler;
